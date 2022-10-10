@@ -223,4 +223,6 @@ write.csv(emoji_data,"C:/Users/frian/OneDrive/Documentos - copia/Francisco eres 
      coord_flip()
  
    
+   
+# it is necessary to export the file to a csv!
      
