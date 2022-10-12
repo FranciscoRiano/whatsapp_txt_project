@@ -1,6 +1,6 @@
 #https://medium.com/analytics-vidhya/how-i-analyzed-whatsapp-chat-in-r-using-rwhatsapp-and-ggplot-912ba9439026
 
-install.packages("rwhatsapp")
+
 library(rwhatsapp)
 library(lubridate)
 library(quantmod)
@@ -10,6 +10,12 @@ library(ggimage)
 library(wordcloud) 
 library(reshape2)
 library(dplyr)
+library(tidytext)
+library(stringr)
+library(tibble)
+library(stringi)
+library(tidyr)
+
 
 
 chat <- rwa_read("C:/Users/frian/OneDrive/Documentos - copia/portfolio/whatsapp_text/WhatsApp_Chat_with_Familia_Riano_Sanchez.txt") %>%
@@ -17,19 +23,60 @@ chat <- rwa_read("C:/Users/frian/OneDrive/Documentos - copia/portfolio/whatsapp_
   mutate(count_character= nchar(text), 
          words= nchar(gsub('[^ ]+', '',text))+1)
 
-plain_chat<-rwa_read("C:/Users/frian/OneDrive/Documentos - copia/portfolio/datasets/WhatsApp_Chat_with_Familia_Riano_Sanchez.txt") %>% mutate(count_character= nchar(text), words= nchar(gsub('[^ ]+', '',text))+1)
 
-to_remove <- c(stopwords(language = "en"), "media","message","deleted","https","www",
+#similar to chat but we are not removing the entries where author is null
+plain_chat<-rwa_read("C:/Users/frian/OneDrive/Documentos - copia/portfolio/whatsapp_text/WhatsApp_Chat_with_Familia_Riano_Sanchez.txt") %>% mutate(count_character= nchar(text), words= nchar(gsub('[^ ]+', '',text))+1)
+
+to_remove <- c(stopwords(language = "es"), "media","message","deleted","https","www",
                "omitted","ref","dass","aan","aa","aan","nee","oru","njan","ok","No","no","yes","Ok","Yes","android.s.wt","he")
 
+
+#remove stop_words in spanish 
 chat_clean <- chat %>%
   unnest_tokens(word, text) %>%
-  anti_join(stop_words)
+  anti_join(stop_words)%>%
+  anti_join(custom_stop_words)
 
+
+#remove more usless words
 chat_clean <- chat_clean %>%
-  na.omit(chat_clean)
+  na.omit(chat_clean)%>%
+  filter(word != 'media')%>%
+  filter(word != 'omitted')%>%
+  filter(word != 'deleted')%>%
+  filter(word != 'message')
 
 
+#More data cleaning
+
+chat_clean_id <-
+  chat_clean %>%
+  mutate(
+    # remove links
+    word = str_remove_all(word, "https\\S*"),
+    word = str_remove_all(word, "http\\S*"),
+    word = str_remove_all(word, "t.co*"),
+    # remove mentions
+    word = str_remove_all(word, "@\\S*"),
+    # remove annoying html stuff
+    word = str_remove_all(word, "amp"),
+    word = str_remove_all(word, "&S*"),
+    word = str_replace_all(word, "&#x27;|&quot;|&#x2F;", "'"),
+    word = str_replace_all(word, "<a(.*?)>", " "),
+    word = str_replace_all(word, "&gt;|&lt;|&amp;", " "),
+    word = str_replace_all(word, "&#[:digit:]+;", " "),
+    word = str_remove_all(word, "<[^>]*>"),
+    # remove numbers
+    word = str_remove_all(word, "[:digit:]"),
+    # remove excess whitespace
+    word = str_squish(word),
+    word = str_trim(word))%>%
+  filter(word != "")
+
+
+
+
+#Metadata about the group chat
 
 daysed<-c("Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday")        
 no_of_days_of_messages<-chat %>% mutate(day=date(time)) %>% summarise(no=length(unique(day))) %>%pull(no)
@@ -97,7 +144,7 @@ chat %>%
   top_n(12) %>%
   ggplot(aes(x = reorder(author, words), y = words)) +
   geom_bar(stat = "identity", fill="#F8766D") +
-  xlab("") + ylab("Number of Messages Sent") +
+  xlab("") + ylab("Number of Words used in Mesages") +
   coord_flip() +
   ggtitle(title)+
   theme(axis.text.x = element_text(color = "grey20", size = 13, angle = 0, hjust = .5, vjust = .5, face = "plain"),
@@ -107,9 +154,12 @@ chat %>%
         axis.title.y = element_text(color = "grey20", size = 13, angle = 90, hjust = .5, vjust = .5, face = "plain")) 
 
 
+#Just to confirm 
+chat %>%
+  group_by(author)%>%
+  summarize(AMT = sum(words))%>%
+  arrange(AMT)
 
-
-help("reorder")
 
 
 
@@ -123,6 +173,7 @@ emoji_data <- rwhatsapp::emojis %>% # data built into package
 
 
 
+#We need to eliminate one specific row, the process is done in excel
 top_chatters<-chat %>% group_by(author) %>% summarise(words=sum(words)) %>%
   top_n(6) %>% pull(author)
 chat %>%
@@ -130,7 +181,7 @@ chat %>%
   count(author, emoji, sort = TRUE) %>%
   group_by(author) %>%
   top_n(n = 3, n) %>% filter(author %in% top_chatters ) %>%
-  left_join(emoji_data2, by = "emoji") %>% 
+  left_join(emoji_data, by = "emoji") %>% 
   ggplot(aes(x = reorder(emoji, n), y = n, fill = author)) +
   geom_col(show.legend = FALSE) +
   ylab("") +
@@ -140,11 +191,35 @@ chat %>%
   facet_wrap(~author, ncol = 3, scales = "free_y") +
   ggtitle("Most often used emojis")
 
-write.csv(emoji_data,"C:/Users/frian/OneDrive/Documentos - copia/Francisco eres el mejor, jamás lo olvides!/emoji_data.csv", row.names = FALSE)
+write.csv(emoji_data,"C:/Users/frian/OneDrive/Documentos - copia/portfolio/whatsapp_text/emoji_data.csv", row.names = FALSE)
 
 
 
- emoji_data2 <- read.csv("C:/Users/frian/OneDrive/Documentos - copia/Francisco eres el mejor, jamás lo olvides!/emoji_data.csv")
+ emoji_data2 <- read.csv("C:/Users/frian/OneDrive/Documentos - copia/portfolio/whatsapp_text/emoji_data.csv")
+ 
+ 
+ 
+ 
+ top_chatters<-chat %>% group_by(author) %>% summarise(words=sum(words)) %>%
+   top_n(6) %>% pull(author)
+ chat %>%
+   unnest(emoji) %>%
+   count(author, emoji, sort = TRUE) %>%
+   group_by(author) %>%
+   top_n(n = 3, n) %>% filter(author %in% top_chatters ) %>%
+   left_join(emoji_data2, by = "emoji") %>% 
+   ggplot(aes(x = reorder(emoji, n), y = n, fill = author)) +
+   geom_col(show.legend = FALSE) +
+   ylab("") +
+   xlab("") +
+   coord_flip() +
+   geom_image(aes(y = n + 50, image = emoji_url)) +
+   facet_wrap(~author, ncol = 2, scales = "free_y") +
+   ggtitle("Most often used emojis")
+ 
+ 
+ 
+ 
  
  
  
@@ -224,5 +299,628 @@ write.csv(emoji_data,"C:/Users/frian/OneDrive/Documentos - copia/Francisco eres 
  
    
    
+   df<-chat_clean_id %>% count(word, sort = TRUE) 
+   set.seed(1234) # for reproducibility 
+   wordcloud(words = df$word, freq = df$n, min.freq = 5,   
+             max.words=250, random.order=FALSE, rot.per=0,      
+             colors=brewer.pal(8, "Dark2"))
+
+
+   
 # it is necessary to export the file to a csv!
+   
+   
+   
+   
+   
+   custom_stop_words <- 
+     tibble(word = c('a',
+                     'actualmente',
+                     'adelante',
+                     'además',
+                     'afirmó',
+                     'agregó',
+                     'ahora',
+                     'ahí',
+                     'al',
+                     'algo',
+                     'alguna',
+                     'algunas',
+                     'alguno',
+                     'algunos',
+                     'algún',
+                     'alrededor',
+                     'ambos',
+                     'ampleamos',
+                     'ante',
+                     'anterior',
+                     'antes',
+                     'apenas',
+                     'aproximadamente',
+                     'aquel',
+                     'aquellas',
+                     'aquellos',
+                     'aqui',
+                     'aquí',
+                     'arriba',
+                     'aseguró',
+                     'así',
+                     'atras',
+                     'aunque',
+                     'ayer',
+                     'añadió',
+                     'aún',
+                     'bajo',
+                     'bastante',
+                     'bien',
+                     'buen',
+                     'buena',
+                     'buenas',
+                     'bueno',
+                     'buenos',
+                     'cada',
+                     'casi',
+                     'cerca',
+                     'cierta',
+                     'ciertas',
+                     'cierto',
+                     'ciertos',
+                     'cinco',
+                     'comentó',
+                     'como',
+                     'con',
+                     'conocer',
+                     'conseguimos',
+                     'conseguir',
+                     'considera',
+                     'consideró',
+                     'consigo',
+                     'consigue',
+                     'consiguen',
+                     'consigues',
+                     'contra',
+                     'cosas',
+                     'creo',
+                     'cual',
+                     'cuales',
+                     'cualquier',
+                     'cuando',
+                     'cuanto',
+                     'cuatro',
+                     'cuenta',
+                     'cómo',
+                     'da',
+                     'dado',
+                     'dan',
+                     'dar',
+                     'de',
+                     'debe',
+                     'deben',
+                     'debido',
+                     'decir',
+                     'dejó',
+                     'del',
+                     'demás',
+                     'dentro',
+                     'desde',
+                     'después',
+                     'dice',
+                     'dicen',
+                     'dicho',
+                     'dieron',
+                     'diferente',
+                     'diferentes',
+                     'dijeron',
+                     'dijo',
+                     'dio',
+                     'donde',
+                     'dos',
+                     'durante',
+                     'e',
+                     'ejemplo',
+                     'el',
+                     'ella',
+                     'ellas',
+                     'ello',
+                     'ellos',
+                     'embargo',
+                     'empleais',
+                     'emplean',
+                     'emplear',
+                     'empleas',
+                     'empleo',
+                     'en',
+                     'encima',
+                     'encuentra',
+                     'entonces',
+                     'entre',
+                     'era',
+                     'erais',
+                     'eramos',
+                     'eran',
+                     'eras',
+                     'eres',
+                     'es',
+                     'esa',
+                     'esas',
+                     'ese',
+                     'eso',
+                     'esos',
+                     'esta',
+                     'estaba',
+                     'estabais',
+                     'estaban',
+                     'estabas',
+                     'estad',
+                     'estada',
+                     'estadas',
+                     'estado',
+                     'estados',
+                     'estais',
+                     'estamos',
+                     'estan',
+                     'estando',
+                     'estar',
+                     'estaremos',
+                     'estará',
+                     'estarán',
+                     'estarás',
+                     'estaré',
+                     'estaréis',
+                     'estaría',
+                     'estaríais',
+                     'estaríamos',
+                     'estarían',
+                     'estarías',
+                     'estas',
+                     'este',
+                     'estemos',
+                     'esto',
+                     'estos',
+                     'estoy',
+                     'estuve',
+                     'estuviera',
+                     'estuvierais',
+                     'estuvieran',
+                     'estuvieras',
+                     'estuvieron',
+                     'estuviese',
+                     'estuvieseis',
+                     'estuviesen',
+                     'estuvieses',
+                     'estuvimos',
+                     'estuviste',
+                     'estuvisteis',
+                     'estuviéramos',
+                     'estuviésemos',
+                     'estuvo',
+                     'está',
+                     'estábamos',
+                     'estáis',
+                     'están',
+                     'estás',
+                     'esté',
+                     'estéis',
+                     'estén',
+                     'estés',
+                     'ex',
+                     'existe',
+                     'existen',
+                     'explicó',
+                     'expresó',
+                     'fin',
+                     'fue',
+                     'fuera',
+                     'fuerais',
+                     'fueran',
+                     'fueras',
+                     'fueron',
+                     'fuese',
+                     'fueseis',
+                     'fuesen',
+                     'fueses',
+                     'fui',
+                     'fuimos',
+                     'fuiste',
+                     'fuisteis',
+                     'fuéramos',
+                     'fuésemos',
+                     'gran',
+                     'grandes',
+                     'gueno',
+                     'ha',
+                     'haber',
+                     'habida',
+                     'habidas',
+                     'habido',
+                     'habidos',
+                     'habiendo',
+                     'habremos',
+                     'habrá',
+                     'habrán',
+                     'habrás',
+                     'habré',
+                     'habréis',
+                     'habría',
+                     'habríais',
+                     'habríamos',
+                     'habrían',
+                     'habrías',
+                     'habéis',
+                     'había',
+                     'habíais',
+                     'habíamos',
+                     'habían',
+                     'habías',
+                     'hace',
+                     'haceis',
+                     'hacemos',
+                     'hacen',
+                     'hacer',
+                     'hacerlo',
+                     'haces',
+                     'hacia',
+                     'haciendo',
+                     'hago',
+                     'han',
+                     'has',
+                     'hasta',
+                     'hay',
+                     'haya',
+                     'hayamos',
+                     'hayan',
+                     'hayas',
+                     'hayáis',
+                     'he',
+                     'hecho',
+                     'hemos',
+                     'hicieron',
+                     'hizo',
+                     'hoy',
+                     'hube',
+                     'hubiera',
+                     'hubierais',
+                     'hubieran',
+                     'hubieras',
+                     'hubieron',
+                     'hubiese',
+                     'hubieseis',
+                     'hubiesen',
+                     'hubieses',
+                     'hubimos',
+                     'hubiste',
+                     'hubisteis',
+                     'hubiéramos',
+                     'hubiésemos',
+                     'hubo',
+                     'igual',
+                     'incluso',
+                     'indicó',
+                     'informó',
+                     'intenta',
+                     'intentais',
+                     'intentamos',
+                     'intentan',
+                     'intentar',
+                     'intentas',
+                     'intento',
+                     'ir',
+                     'junto',
+                     'la',
+                     'lado',
+                     'largo',
+                     'las',
+                     'le',
+                     'les',
+                     'llegó',
+                     'lleva',
+                     'llevar',
+                     'lo',
+                     'los',
+                     'luego',
+                     'lugar',
+                     'manera',
+                     'manifestó',
+                     'mayor',
+                     'me',
+                     'mediante',
+                     'mejor',
+                     'mencionó',
+                     'menos',
+                     'mi',
+                     'mientras',
+                     'mio',
+                     'mis',
+                     'misma',
+                     'mismas',
+                     'mismo',
+                     'mismos',
+                     'modo',
+                     'momento',
+                     'mucha',
+                     'muchas',
+                     'mucho',
+                     'muchos',
+                     'muy',
+                     'más',
+                     'mí',
+                     'mía',
+                     'mías',
+                     'mío',
+                     'míos',
+                     'nada',
+                     'nadie',
+                     'ni',
+                     'ninguna',
+                     'ningunas',
+                     'ninguno',
+                     'ningunos',
+                     'ningún',
+                     'no',
+                     'nos',
+                     'nosotras',
+                     'nosotros',
+                     'nuestra',
+                     'nuestras',
+                     'nuestro',
+                     'nuestros',
+                     'nueva',
+                     'nuevas',
+                     'nuevo',
+                     'nuevos',
+                     'nunca',
+                     'o',
+                     'ocho',
+                     'os',
+                     'otra',
+                     'otras',
+                     'otro',
+                     'otros',
+                     'para',
+                     'parece',
+                     'parte',
+                     'partir',
+                     'pasada',
+                     'pasado',
+                     'pero',
+                     'pesar',
+                     'poca',
+                     'pocas',
+                     'poco',
+                     'pocos',
+                     'podeis',
+                     'podemos',
+                     'poder',
+                     'podria',
+                     'podriais',
+                     'podriamos',
+                     'podrian',
+                     'podrias',
+                     'podrá',
+                     'podrán',
+                     'podría',
+                     'podrían',
+                     'poner',
+                     'por',
+                     'por qué',
+                     'porque',
+                     'posible',
+                     'primer',
+                     'primera',
+                     'primero',
+                     'primeros',
+                     'principalmente',
+                     'propia',
+                     'propias',
+                     'propio',
+                     'propios',
+                     'próximo',
+                     'próximos',
+                     'pudo',
+                     'pueda',
+                     'puede',
+                     'pueden',
+                     'puedo',
+                     'pues',
+                     'que',
+                     'quedó',
+                     'queremos',
+                     'quien',
+                     'quienes',
+                     'quiere',
+                     'quién',
+                     'qué',
+                     'realizado',
+                     'realizar',
+                     'realizó',
+                     'respecto',
+                     'sabe',
+                     'sabeis',
+                     'sabemos',
+                     'saben',
+                     'saber',
+                     'sabes',
+                     'se',
+                     'sea',
+                     'seamos',
+                     'sean',
+                     'seas',
+                     'segunda',
+                     'segundo',
+                     'según',
+                     'seis',
+                     'ser',
+                     'seremos',
+                     'será',
+                     'serán',
+                     'serás',
+                     'seré',
+                     'seréis',
+                     'sería',
+                     'seríais',
+                     'seríamos',
+                     'serían',
+                     'serías',
+                     'seáis',
+                     'señaló',
+                     'si',
+                     'sido',
+                     'siempre',
+                     'siendo',
+                     'siete',
+                     'sigue',
+                     'siguiente',
+                     'sin',
+                     'sino',
+                     'sobre',
+                     'sois',
+                     'sola',
+                     'solamente',
+                     'solas',
+                     'solo',
+                     'solos',
+                     'somos',
+                     'son',
+                     'soy',
+                     'su',
+                     'sus',
+                     'suya',
+                     'suyas',
+                     'suyo',
+                     'suyos',
+                     'sí',
+                     'sólo',
+                     'tal',
+                     'también',
+                     'tampoco',
+                     'tan',
+                     'tanto',
+                     'te',
+                     'tendremos',
+                     'tendrá',
+                     'tendrán',
+                     'tendrás',
+                     'tendré',
+                     'tendréis',
+                     'tendría',
+                     'tendríais',
+                     'tendríamos',
+                     'tendrían',
+                     'tendrías',
+                     'tened',
+                     'teneis',
+                     'tenemos',
+                     'tener',
+                     'tenga',
+                     'tengamos',
+                     'tengan',
+                     'tengas',
+                     'tengo',
+                     'tengáis',
+                     'tenida',
+                     'tenidas',
+                     'tenido',
+                     'tenidos',
+                     'teniendo',
+                     'tenéis',
+                     'tenía',
+                     'teníais',
+                     'teníamos',
+                     'tenían',
+                     'tenías',
+                     'tercera',
+                     'ti',
+                     'tiempo',
+                     'tiene',
+                     'tienen',
+                     'tienes',
+                     'toda',
+                     'todas',
+                     'todavía',
+                     'todo',
+                     'todos',
+                     'total',
+                     'trabaja',
+                     'trabajais',
+                     'trabajamos',
+                     'trabajan',
+                     'trabajar',
+                     'trabajas',
+                     'trabajo',
+                     'tras',
+                     'trata',
+                     'través',
+                     'tres',
+                     'tu',
+                     'tus',
+                     'tuve',
+                     'tuviera',
+                     'tuvierais',
+                     'tuvieran',
+                     'tuvieras',
+                     'tuvieron',
+                     'tuviese',
+                     'tuvieseis',
+                     'tuviesen',
+                     'tuvieses',
+                     'tuvimos',
+                     'tuviste',
+                     'tuvisteis',
+                     'tuviéramos',
+                     'tuviésemos',
+                     'tuvo',
+                     'tuya',
+                     'tuyas',
+                     'tuyo',
+                     'tuyos',
+                     'tú',
+                     'ultimo',
+                     'un',
+                     'una',
+                     'unas',
+                     'uno',
+                     'unos',
+                     'usa',
+                     'usais',
+                     'usamos',
+                     'usan',
+                     'usar',
+                     'usas',
+                     'uso',
+                     'usted',
+                     'va',
+                     'vais',
+                     'valor',
+                     'vamos',
+                     'van',
+                     'varias',
+                     'varios',
+                     'vaya',
+                     'veces',
+                     'ver',
+                     'verdad',
+                     'verdadera',
+                     'verdadero',
+                     'vez',
+                     'vosotras',
+                     'vosotros',
+                     'voy',
+                     'vuestra',
+                     'vuestras',
+                     'vuestro',
+                     'vuestros',
+                     'y',
+                     'ya',
+                     'yo',
+                     'él',
+                     'éramos',
+                     'ésta',
+                     'éstas',
+                     'éste',
+                     'éstos',
+                     'última',
+                     'últimas',
+                     'último',
+                     'últimos'))
+   
      
