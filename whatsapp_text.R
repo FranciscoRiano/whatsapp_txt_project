@@ -17,7 +17,7 @@ library(stringi)
 library(tidyr)
 
 
-
+#first step: import the data set that is the script of a WhatsApp group chat
 chat <- rwa_read("C:/Users/frian/OneDrive/Documentos - copia/portfolio/whatsapp_text/WhatsApp_Chat_with_Familia_Riano_Sanchez.txt") %>%
   filter(!is.na(author)) %>%
   mutate(count_character= nchar(text), 
@@ -30,21 +30,26 @@ plain_chat<-rwa_read("C:/Users/frian/OneDrive/Documentos - copia/portfolio/whats
 to_remove <- c(stopwords(language = "es"), "media","message","deleted","https","www",
                "omitted","ref","dass","aan","aa","aan","nee","oru","njan","ok","No","no","yes","Ok","Yes","android.s.wt","he")
 
-
-#remove stop_words in spanish 
+         
+    
+         
+#remove stop_words in Spanish - Befor doing it, it is important to create the customized stop_words just in Spanish
 chat_clean <- chat %>%
   unnest_tokens(word, text) %>%
   anti_join(stop_words)%>%
-  anti_join(custom_stop_words)
+  anti_join(custom_stop_words_sp)
 
 
-#remove more usless words
+#remove more useless words
 chat_clean <- chat_clean %>%
   na.omit(chat_clean)%>%
   filter(word != 'media')%>%
   filter(word != 'omitted')%>%
   filter(word != 'deleted')%>%
-  filter(word != 'message')
+  filter(word != 'message')%>%
+  filter(word != 'www.facebook.com')%>%
+  filter(word != 'youtu.be')%>%
+  filter(word != 'whatsapp')
 
 
 #More data cleaning
@@ -56,8 +61,11 @@ chat_clean_id <-
     word = str_remove_all(word, "https\\S*"),
     word = str_remove_all(word, "http\\S*"),
     word = str_remove_all(word, "t.co*"),
+    word = str_remove_all(word, "www"),
     # remove mentions
     word = str_remove_all(word, "@\\S*"),
+    # remove punctuation
+    word = str_remove_all(word, "[:punct:]"),
     # remove annoying html stuff
     word = str_remove_all(word, "amp"),
     word = str_remove_all(word, "&S*"),
@@ -115,8 +123,7 @@ no_times_chat_changed <- plain_chat %>% filter(is.na(author)) %>% filter(str_det
 
 
 
-
-
+#Graph with the number of messages along the time period
 var<-chat %>% mutate(date = date(time)) %>% count(date) %>% top_n(1)
 title<-paste0("Most Active day was ",var %>% pull(date),"\n with ",var %>% pull(n)," messages")
 
@@ -136,7 +143,7 @@ chat %>%
 
 
 
-
+#Graph with number of words used in messages grouped by author
 title<-paste0(chat %>% group_by(author) %>% summarise(words=sum(words)) %>% top_n(1) %>% pull(author)," is the most active person!")
 chat %>% 
   group_by(author) %>%
@@ -144,7 +151,7 @@ chat %>%
   top_n(12) %>%
   ggplot(aes(x = reorder(author, words), y = words)) +
   geom_bar(stat = "identity", fill="#F8766D") +
-  xlab("") + ylab("Number of Words used in Mesages") +
+  xlab("") + ylab("Number of Words used in Messages") +
   coord_flip() +
   ggtitle(title)+
   theme(axis.text.x = element_text(color = "grey20", size = 13, angle = 0, hjust = .5, vjust = .5, face = "plain"),
@@ -154,7 +161,7 @@ chat %>%
         axis.title.y = element_text(color = "grey20", size = 13, angle = 90, hjust = .5, vjust = .5, face = "plain")) 
 
 
-#Just to confirm 
+#Just to confirm the info provided by the graph from above
 chat %>%
   group_by(author)%>%
   summarize(AMT = sum(words))%>%
@@ -199,7 +206,7 @@ write.csv(emoji_data,"C:/Users/frian/OneDrive/Documentos - copia/portfolio/whats
  
  
  
- 
+ #Graph with the most used emojis grouped by author
  top_chatters<-chat %>% group_by(author) %>% summarise(words=sum(words)) %>%
    top_n(6) %>% pull(author)
  chat %>%
@@ -220,35 +227,6 @@ write.csv(emoji_data,"C:/Users/frian/OneDrive/Documentos - copia/portfolio/whats
  
  
  
- 
- 
- 
- 
- 
- top_chatters<-chat %>% group_by(author) %>% summarise(words=sum(words)) %>% top_n(6) %>% pull(author)
- 
- chat_cleaned %>% top_chatters
-   select(word, author) %>%
-   filter(!word %in% to_remove) %>%
-   mutate(word = gsub(".com", "", word)) %>%
-   mutate(word = gsub("^gag", "9gag", word)) %>%
-   count(author, word, sort = TRUE) %>% 
-   bind_tf_idf(term = word, document = author, n = n) %>%
-   filter(n > 5) %>% filter(author %in% top_chatters ) %>%
-   group_by(author) %>%
-   top_n(n = 4, tf_idf) %>%
-   ggplot(aes(x = reorder_within(word, n, author), y = n, fill = author)) +
-   geom_col(show.legend = FALSE) +
-   ylab("") +
-   xlab("") +
-   coord_flip() +
-   facet_wrap(~author, ncol = 3, scales = "free_y") +
-   scale_x_reordered()+
-   ggtitle("Common Words Used")
-   
-   
-   
-   
    # to find the hour when most messages are sent
    title<-paste0("Most Messages happen at hour ",chat() %>% mutate(hour = hour(time)) %>% count(hour) %>% top_n(1) %>% pull(hour))
    chat %>%
@@ -279,26 +257,39 @@ write.csv(emoji_data,"C:/Users/frian/OneDrive/Documentos - copia/portfolio/whats
    
    
    
-
-   df<-chat %>% unnest_tokens(input = text, output = word) %>% filter(!word %in% to_remove) %>% count(word, sort = TRUE) 
-   set.seed(1234) # for reproducibility 
-   wordcloud(words = df$word, freq = df$n, min.freq = 5,   
-             max.words=250, random.order=FALSE, rot.per=0,      
-             colors=brewer.pal(8, "Dark2"))
-   
-
-      
+#Plot with the number of messages per author
    chat %>%
      group_by(author)%>%
      summarize(AMT = n())%>%
      arrange(AMT)%>%
      top_n(18)%>%
-     ggplot(aes(x = author, y = AMT)) +
-     geom_col()+
-     coord_flip()
+     ggplot(aes(x = reorder(author, AMT), y = AMT)) +
+     geom_col(fill = "steelblue")+
+     coord_flip()+
+     xlab("Author")+
+     ylab("Number of messages")+
+     ggtitle("Number of Messages Sent by Author")+
+     theme(panel.background = element_blank())
+   
+   
  
+#Plot with the average number of words used in one message  
+chat%>%
+  group_by(author)%>%
+  summarize(TOT = sum(words), AMT = n(), AVG = sum(words)/n() )%>%
+  arrange(AVG)%>%
+  top_n(18)%>%
+  ggplot(aes(x = reorder(author, AVG), y = AVG))+
+  geom_col(fill = "darkred")+
+  coord_flip()+
+  xlab("Author")+
+  ylab("Average number of words per message")+
+  ggtitle("Average Number of Words Used by Author per Message")+
+  theme(panel.background = element_blank())
    
    
+   
+#Wordcloud with the most used words in the group chat
    df<-chat_clean_id %>% count(word, sort = TRUE) 
    set.seed(1234) # for reproducibility 
    wordcloud(words = df$word, freq = df$n, min.freq = 5,   
@@ -307,13 +298,11 @@ write.csv(emoji_data,"C:/Users/frian/OneDrive/Documentos - copia/portfolio/whats
 
 
    
-# it is necessary to export the file to a csv!
+#It is necessary to create a customized stop word list.
    
    
    
-   
-   
-   custom_stop_words <- 
+   custom_stop_words_sp <- 
      tibble(word = c('a',
                      'actualmente',
                      'adelante',
