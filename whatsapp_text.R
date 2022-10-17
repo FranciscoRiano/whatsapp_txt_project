@@ -21,7 +21,8 @@ library(tidyr)
 chat <- rwa_read("C:/Users/frian/OneDrive/Documentos - copia/portfolio/whatsapp_text/WhatsApp_Chat_with_Familia_Riano_Sanchez.txt") %>%
   filter(!is.na(author)) %>%
   mutate(count_character= nchar(text), 
-         words= nchar(gsub('[^ ]+', '',text))+1)
+         words= nchar(gsub('[^ ]+', '',text))+1)%>%
+  rownames_to_column("id")
 
 
 #similar to chat but we are not removing the entries where author is null
@@ -243,7 +244,8 @@ write.csv(emoji_data,"C:/Users/frian/OneDrive/Documentos - copia/portfolio/whats
    most_active_day_of_week<-chat %>% mutate(day = wday(as.Date(time),week_start = 2)) %>% count(day) %>% top_n(1) %>% pull(day)
    most_active_day_of_week<-daysed[most_active_day_of_week]
    title<-paste0("Most messages are sent on a ",most_active_day_of_week)
-   days<-c("Mon","Tue","Wed","Thu","Fri","Sat","Sun") # for axis labels
+   days<-c("Mon","Tue","Wed","Thu","Fri","Sat","Sun")
+   months_c <- c("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dic")# for axis labels
    
    chat %>%
      mutate(day = wday(as.Date(time),week_start = 2)) %>%
@@ -255,7 +257,15 @@ write.csv(emoji_data,"C:/Users/frian/OneDrive/Documentos - copia/portfolio/whats
      scale_x_continuous(breaks = 1:7,labels=days)+
      scale_x_continuous(breaks = 1:7,labels=days)
    
-   
+   chat %>%
+     mutate(month = month(time)) %>%
+     count(month)  %>%
+     ggplot(aes(x = month, y = n)) +
+     geom_bar(stat = "identity", fill="darkred") +
+     ylab("") + xlab("Messages Per Month") +
+     ggtitle(title) +       
+     scale_x_continuous(breaks = 1:12,labels=months_c)+
+     scale_x_continuous(breaks = 1:12,labels=months_c)   
    
 #Plot with the number of messages per author
    chat %>%
@@ -297,6 +307,10 @@ chat%>%
              colors=brewer.pal(8, "Dark2"))
 
 
+
+   
+
+ 
    
 #It is necessary to create a customized stop word list.
    
