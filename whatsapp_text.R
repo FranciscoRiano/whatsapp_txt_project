@@ -229,15 +229,17 @@ write.csv(emoji_data,"C:/Users/frian/OneDrive/Documentos - copia/portfolio/whats
  
  
    # to find the hour when most messages are sent
-   title<-paste0("Most Messages happen at hour ",chat() %>% mutate(hour = hour(time)) %>% count(hour) %>% top_n(1) %>% pull(hour))
+   title_time<-paste0(chat %>% mutate(hour = hour(time)) %>% count(hour) %>% top_n(1) %>% pull(hour), " Is the most active hour")
    chat %>%
      mutate(hour = hour(time)) %>%
      count(hour) %>%
      ggplot(aes(x = hour, y = n)) +
      geom_bar(stat = "identity",fill="steelblue") +
      ylab("") + xlab("Messages for every hour") +
-     ggtitle(title)+
+     ggtitle(title_time)+
      scale_x_continuous(breaks = 0:23)
+   
+   
    
    #to find which day of the week most messages are being sent
    daysed<-c("Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday")        
@@ -245,9 +247,10 @@ write.csv(emoji_data,"C:/Users/frian/OneDrive/Documentos - copia/portfolio/whats
    most_active_day_of_week<-daysed[most_active_day_of_week]
    title<-paste0("Most messages are sent on a ",most_active_day_of_week)
    days<-c("Mon","Tue","Wed","Thu","Fri","Sat","Sun")
-   months_c <- c("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dic")# for axis labels
+   # for axis labels
+
    
-   chat %>%
+    chat %>%
      mutate(day = wday(as.Date(time),week_start = 2)) %>%
      count(day)  %>%
      ggplot(aes(x = day, y = n)) +
@@ -256,17 +259,31 @@ write.csv(emoji_data,"C:/Users/frian/OneDrive/Documentos - copia/portfolio/whats
      ggtitle(title) +       
      scale_x_continuous(breaks = 1:7,labels=days)+
      scale_x_continuous(breaks = 1:7,labels=days)
+
    
-   chat %>%
+# to find which month of the year is the most active in the group chat
+    
+    month_sed <- c("January","February","March","April","May","Jun","July","August","September","October","November","December")
+    most_active_month_of_year<-chat %>% mutate(month = month(time)) %>% count(month) %>% top_n(1) %>% pull(month)
+    most_active_month_of_year<-month_sed[most_active_month_of_year]
+    months_c <- c("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec")
+    title_month<-paste0("Most messages are sent on ",most_active_month_of_year)
+   
+     
+   mutate(MonthName = month.name[month(time)])
+     chat %>%
      mutate(month = month(time)) %>%
      count(month)  %>%
      ggplot(aes(x = month, y = n)) +
      geom_bar(stat = "identity", fill="darkred") +
      ylab("") + xlab("Messages Per Month") +
-     ggtitle(title) +       
+     ggtitle(title_month) +       
      scale_x_continuous(breaks = 1:12,labels=months_c)+
      scale_x_continuous(breaks = 1:12,labels=months_c)   
-   
+ 
+
+
+     
 #Plot with the number of messages per author
    chat %>%
      group_by(author)%>%
